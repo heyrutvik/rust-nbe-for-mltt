@@ -59,7 +59,12 @@ pub enum Term {
 
 pub trait TermVisitor<T> {
     fn visit_var(&mut self, ident: &Ident) -> T;
-    fn visit_let(&mut self, ident: &Ident, def: T, body: T) -> T;
+    fn visit_let(
+        &mut self,
+        ident: &Ident,
+        def: impl Fn(&mut Self) -> T,
+        body: impl Fn(&mut Self) -> T,
+    ) -> T;
     fn visit_check(&mut self, term: T, ann: T) -> T;
 
     fn visit_nat_ty(&mut self) -> T;
@@ -89,11 +94,11 @@ impl Term {
     pub fn dispatch<T>(&self, visitor: &mut impl TermVisitor<T>) -> T {
         match *self {
             Term::Var(ref ident) => visitor.visit_var(ident),
-            Term::Let(ref ident, ref def, ref body) => {
-                let def = def.dispatch(visitor);
-                let body = body.dispatch(visitor);
-                visitor.visit_let(ident, def, body)
-            },
+            Term::Let(ref ident, ref def, ref body) => visitor.visit_let(
+                ident,
+                |visitor| def.dispatch(visitor),
+                |visitor| body.dispatch(visitor),
+            ),
             Term::Check(ref term, ref ann) => {
                 let term = term.dispatch(visitor);
                 let ann = ann.dispatch(visitor);
@@ -175,8 +180,13 @@ impl TermVisitor<Term> for NewTermVisitor {
         Term::Var(ident.clone())
     }
 
-    fn visit_let(&mut self, ident: &Ident, def: Term, body: Term) -> Term {
-        Term::FunType(ident.clone(), Box::new(def), Box::new(body))
+    fn visit_let(
+        &mut self,
+        ident: &Ident,
+        def: impl Fn(&mut Self) -> Term,
+        body: impl Fn(&mut Self) -> Term,
+    ) -> Term {
+        Term::FunType(ident.clone(), Box::new(def(self)), Box::new(body(self)))
     }
 
     fn visit_check(&mut self, term: Term, ann: Term) -> Term {

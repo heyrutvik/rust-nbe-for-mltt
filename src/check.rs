@@ -1,7 +1,7 @@
 use im;
 
 use nbe::{self, NbeError};
-use syntax::core::{RcTerm, Term};
+use syntax::core::{self, RcTerm, Term};
 use syntax::domain::{self, RcValue, Value};
 use syntax::{DbIndex, DbLevel, UniverseLevel};
 
@@ -255,5 +255,141 @@ pub fn check_ty(env: &Env, size: u32, ty: &RcTerm) -> Result<(), TypeError> {
                 }),
             }
         },
+    }
+}
+
+pub struct SynthVisitor {
+    size: u32,
+}
+
+pub type SynthResult = Result<RcValue, TypeError>;
+
+impl core::TermVisitor<SynthResult> for SynthVisitor {
+    fn visit_var(&mut self, index: DbIndex) -> SynthResult {
+        unimplemented!("visit_var")
+    }
+    fn visit_let(
+        &mut self,
+        def: impl Fn(&mut Self) -> SynthResult,
+        body: impl Fn(&mut Self) -> SynthResult,
+    ) -> SynthResult {
+        unimplemented!("visit_let")
+    }
+    fn visit_check(&mut self, term: SynthResult, ann: SynthResult) -> SynthResult {
+        unimplemented!("visit_check")
+    }
+
+    fn visit_nat_ty(&mut self) -> SynthResult {
+        unimplemented!("visit_nat_ty")
+    }
+    fn visit_nat_zero(&mut self) -> SynthResult {
+        unimplemented!("visit_nat_zero")
+    }
+    fn visit_nat_succ(&mut self, nat: SynthResult) -> SynthResult {
+        unimplemented!("visit_nat_succ")
+    }
+    fn visit_nat_rec(
+        &mut self,
+        motive: SynthResult,
+        zero: SynthResult,
+        succ: SynthResult,
+        nat: SynthResult,
+    ) -> SynthResult {
+        unimplemented!("visit_nat_rec")
+    }
+
+    fn visit_fun_ty(&mut self, src_ty: SynthResult, dst_ty: SynthResult) -> SynthResult {
+        unimplemented!("visit_fun_ty")
+    }
+    fn visit_fun_intro(&mut self, body: SynthResult) -> SynthResult {
+        unimplemented!("visit_fun_intro")
+    }
+    fn visit_fun_app(&mut self, fun: SynthResult, arg: SynthResult) -> SynthResult {
+        unimplemented!("visit_fun_app")
+    }
+
+    fn visit_pair_ty(&mut self, fst_ty: SynthResult, snd_ty: SynthResult) -> SynthResult {
+        unimplemented!("visit_pair_ty")
+    }
+    fn visit_pair_intro(&mut self, fst: SynthResult, snd: SynthResult) -> SynthResult {
+        unimplemented!("visit_pair_intro")
+    }
+    fn visit_pair_fst(&mut self, pair: SynthResult) -> SynthResult {
+        unimplemented!("visit_pair_fst")
+    }
+    fn visit_pair_snd(&mut self, pair: SynthResult) -> SynthResult {
+        unimplemented!("visit_pair_snd")
+    }
+
+    fn visit_universe(&mut self, level: UniverseLevel) -> SynthResult {
+        unimplemented!("visit_universe")
+    }
+}
+
+pub struct CheckVisitor {
+    size: u32,
+}
+
+pub type CheckResult = Result<(), TypeError>;
+
+impl core::TermVisitor<CheckResult> for CheckVisitor {
+    fn visit_var(&mut self, index: DbIndex) -> CheckResult {
+        unimplemented!("visit_var")
+    }
+    fn visit_let(
+        &mut self,
+        def: impl Fn(&mut Self) -> CheckResult,
+        body: impl Fn(&mut Self) -> CheckResult,
+    ) -> CheckResult {
+        unimplemented!("visit_let")
+    }
+    fn visit_check(&mut self, term: CheckResult, ann: CheckResult) -> CheckResult {
+        unimplemented!("visit_check")
+    }
+
+    fn visit_nat_ty(&mut self) -> CheckResult {
+        unimplemented!("visit_nat_ty")
+    }
+    fn visit_nat_zero(&mut self) -> CheckResult {
+        unimplemented!("visit_nat_zero")
+    }
+    fn visit_nat_succ(&mut self, nat: CheckResult) -> CheckResult {
+        unimplemented!("visit_nat_succ")
+    }
+    fn visit_nat_rec(
+        &mut self,
+        motive: CheckResult,
+        zero: CheckResult,
+        succ: CheckResult,
+        nat: CheckResult,
+    ) -> CheckResult {
+        unimplemented!("visit_nat_rec")
+    }
+
+    fn visit_fun_ty(&mut self, src_ty: CheckResult, dst_ty: CheckResult) -> CheckResult {
+        unimplemented!("visit_fun_ty")
+    }
+    fn visit_fun_intro(&mut self, body: CheckResult) -> CheckResult {
+        unimplemented!("visit_fun_intro")
+    }
+    fn visit_fun_app(&mut self, fun: CheckResult, arg: CheckResult) -> CheckResult {
+        unimplemented!("visit_fun_app")
+    }
+
+    fn visit_pair_ty(&mut self, fst_ty: CheckResult, snd_ty: CheckResult) -> CheckResult {
+        unimplemented!("visit_pair_ty")
+    }
+    fn visit_pair_intro(&mut self, fst: CheckResult, snd: CheckResult) -> CheckResult {
+        unimplemented!("visit_pair_intro")
+    }
+    fn visit_pair_fst(&mut self, pair: CheckResult) -> CheckResult {
+        unimplemented!("visit_pair_fst")
+    }
+    fn visit_pair_snd(&mut self, pair: CheckResult) -> CheckResult {
+        unimplemented!("visit_pair_snd")
+    }
+
+    fn visit_universe(&mut self, level: UniverseLevel) -> CheckResult {
+        unimplemented!("visit_universe")
     }
 }

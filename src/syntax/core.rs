@@ -64,7 +64,7 @@ pub enum Term {
 
 pub trait TermVisitor<T> {
     fn visit_var(&mut self, index: DbIndex) -> T;
-    fn visit_let(&mut self, def: T, body: T) -> T;
+    fn visit_let(&mut self, def: impl Fn(&mut Self) -> T, body: impl Fn(&mut Self) -> T) -> T;
     fn visit_check(&mut self, term: T, ann: T) -> T;
 
     fn visit_nat_ty(&mut self) -> T;
@@ -88,11 +88,10 @@ impl RcTerm {
     pub fn dispatch<T>(&self, visitor: &mut impl TermVisitor<T>) -> T {
         match *self.inner {
             Term::Var(index) => visitor.visit_var(index),
-            Term::Let(ref def, ref body) => {
-                let def = def.dispatch(visitor);
-                let body = body.dispatch(visitor);
-                visitor.visit_let(def, body)
-            },
+            Term::Let(ref def, ref body) => visitor.visit_let(
+                |visitor| def.dispatch(visitor),
+                |visitor| body.dispatch(visitor),
+            ),
             Term::Check(ref term, ref ann) => {
                 let term = term.dispatch(visitor);
                 let ann = ann.dispatch(visitor);
@@ -182,8 +181,12 @@ impl TermVisitor<RcTerm> for NewTermVisitor {
         RcTerm::from(Term::Var(index))
     }
 
-    fn visit_let(&mut self, def: RcTerm, body: RcTerm) -> RcTerm {
-        RcTerm::from(Term::FunType(def, body))
+    fn visit_let(
+        &mut self,
+        def: impl Fn(&mut Self) -> RcTerm,
+        body: impl Fn(&mut Self) -> RcTerm,
+    ) -> RcTerm {
+        RcTerm::from(Term::FunType(def(self), body(self)))
     }
 
     fn visit_check(&mut self, term: RcTerm, ann: RcTerm) -> RcTerm {
