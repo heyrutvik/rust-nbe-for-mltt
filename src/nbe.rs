@@ -5,7 +5,7 @@
 //! `Normal` terms.
 
 use syntax::core::{self, RcTerm, Term};
-use syntax::domain::{self, Closure, Env, Nf, RcType, RcValue, Value};
+use syntax::domain::{self, ChoiceClosure, Closure, Env, Nf, RcType, RcValue, Value};
 use syntax::normal::{self, Normal, RcNormal};
 use syntax::{DbIndex, DbLevel};
 
@@ -68,10 +68,30 @@ pub fn do_closure(closure: &Closure, arg: RcValue) -> Result<RcValue, NbeError> 
     eval(&closure.term, &env)
 }
 
+/// Run a choice closure with the given argument
+pub fn do_choice_closure(closure: &ChoiceClosure, arg: RcValue) -> Result<RcValue, NbeError> {
+    match *arg.inner {
+        Value::CaseIntro(ref label, ref term) => {
+            match closure.choices.iter().find(|&(ref l, _)| l == label) {
+                Some(&(_, ref fun)) => {
+                    let fun = Closure {
+                        term: fun.clone(),
+                        env: closure.env.clone(),
+                    };
+                    return do_closure(&fun, term.clone());
+                },
+                None => Err(NbeError::new("do_choice_closure: no matching choice")),
+            }
+        },
+        _ => Err(NbeError::new("do_choice_closure: not a case introduction")),
+    }
+}
+
 /// Apply an argument to a function
 pub fn do_app(fun: &RcValue, arg: RcValue) -> Result<RcValue, NbeError> {
     match *fun.inner {
         Value::FunIntro(_, ref body) => do_closure(body, arg),
+        Value::CaseSplit(ref choices) => do_choice_closure(choices, arg),
         Value::Neutral(ref fun, ref fun_ty) => match *fun_ty.inner {
             Value::FunType(_, ref param_ty, ref body_ty) => {
                 let arg_nf = Nf::new(arg.clone(), param_ty.clone());
@@ -135,6 +155,20 @@ pub fn eval(term: &RcTerm, env: &Env) -> Result<RcValue, NbeError> {
         Term::PairFst(ref pair) => do_pair_fst(&eval(pair, env)?),
         Term::PairSnd(ref pair) => do_pair_snd(&eval(pair, env)?),
 
+        // Cases
+        Term::CaseType(ref choices) => Ok(RcValue::from(Value::CaseType(ChoiceClosure {
+            choices: choices.clone(),
+            env: env.clone(),
+        }))),
+        Term::CaseIntro(ref label, ref term) => Ok(RcValue::from(Value::CaseIntro(
+            label.clone(),
+            eval(term, env)?,
+        ))),
+        Term::CaseSplit(ref choices) => Ok(RcValue::from(Value::CaseSplit(ChoiceClosure {
+            choices: choices.clone(),
+            env: env.clone(),
+        }))),
+
         // Universes
         Term::Universe(level) => Ok(RcValue::from(Value::Universe(level))),
     }
@@ -181,6 +215,12 @@ pub fn read_back_nf(size: u32, nf: Nf) -> Result<RcNormal, NbeError> {
             )))
         },
 
+        // Cases
+        (&Value::CaseIntro(ref label, ref term), &Value::CaseType(ref choices)) => {
+            unimplemented!("read_back_nf: Value::CaseType")
+        },
+        (&Value::CaseSplit(ref choices), _) => unimplemented!("read_back_nf: Value::CaseSplit"),
+
         // Types
         (&Value::FunType(ref ident, ref param_ty, ref body_ty), &Value::Universe(_)) => {
             let param = RcValue::var(ident.clone(), DbLevel(size), param_ty.clone());
@@ -203,6 +243,19 @@ pub fn read_back_nf(size: u32, nf: Nf) -> Result<RcNormal, NbeError> {
                 read_back_nf(size, Nf::new(fst_ty, ann.clone()))?,
                 read_back_nf(size + 1, Nf::new(snd_ty, ann.clone()))?,
             )))
+        },
+        (&Value::CaseType(ref closure), &Value::Universe(_)) => {
+            let choices = closure
+                .choices
+                .iter()
+                .map(|(ref label, ref ty)| {
+                    let ty = eval(ty, &closure.env)?;
+                    let ty = read_back_nf(size, Nf::new(ty, ann.clone()))?;
+                    Ok((label.clone(), ty))
+                })
+                .collect::<Result<Vec<_>, NbeError>>()?;
+
+            Ok(RcNormal::from(Normal::CaseType(choices.into())))
         },
         (&Value::Universe(level), &Value::Universe(_)) => {
             Ok(RcNormal::from(Normal::Universe(level)))
@@ -273,6 +326,9 @@ pub fn check_subtype(size: u32, ty1: &RcType, ty2: &RcType) -> Result<bool, NbeE
                 let snd_ty2 = do_closure(snd_ty2, fst)?;
                 check_subtype(size + 1, &snd_ty1, &snd_ty2)?
             })
+        },
+        (&Value::CaseType(ref choices1), &Value::CaseType(ref choices2)) => {
+            unimplemented!("check_subtype: Value::CaseType")
         },
         (&Value::Universe(level1), &Value::Universe(level2)) => Ok(level1 <= level2),
         _ => Ok(false),

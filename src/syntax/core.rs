@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use syntax::{DbIndex, IdentHint, UniverseLevel};
+use syntax::{DbIndex, IdentHint, Label, UniverseLevel};
 
 pub type Env = im::Vector<(IdentHint, RcTerm)>;
 
@@ -43,6 +43,13 @@ pub enum Term {
     PairFst(RcTerm),
     /// Project the second element of a pair
     PairSnd(RcTerm),
+
+    /// Case type
+    CaseType(Rc<[(Label, RcTerm)]>),
+    /// Case introduction
+    CaseIntro(Label, RcTerm),
+    /// Case split
+    CaseSplit(Rc<[(Label, RcTerm)]>),
 
     /// Universe of types
     Universe(UniverseLevel),

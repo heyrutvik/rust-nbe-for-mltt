@@ -49,3 +49,7 @@ pub struct DbIndex(pub u32);
 /// The level of a universe
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniverseLevel(pub u32);
+
+/// Labels - for fields and variants
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Label(pub String);

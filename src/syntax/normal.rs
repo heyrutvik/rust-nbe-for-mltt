@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use syntax::{DbIndex, IdentHint, UniverseLevel};
+use syntax::{DbIndex, IdentHint, Label, UniverseLevel};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RcNormal {
@@ -44,6 +44,13 @@ pub enum Normal {
     PairType(IdentHint, RcNormal, RcNormal),
     /// Introduce a pair
     PairIntro(RcNormal, RcNormal),
+
+    /// Case type
+    CaseType(Rc<[(Label, RcNormal)]>),
+    /// Case introduction
+    CaseIntro(Label, RcNormal),
+    /// Case split
+    CaseSplit(Rc<[(Label, RcNormal)]>),
 
     /// Universe of types
     Universe(UniverseLevel),

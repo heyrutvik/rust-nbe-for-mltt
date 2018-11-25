@@ -3,7 +3,7 @@ use im;
 use nbe::{self, NbeError};
 use syntax::core::{RcTerm, Term};
 use syntax::domain::{self, RcType, RcValue, Value};
-use syntax::{DbIndex, DbLevel, UniverseLevel};
+use syntax::{DbIndex, DbLevel, Label, UniverseLevel};
 
 #[derive(Debug, Clone)]
 pub enum Entry {
@@ -20,6 +20,13 @@ pub enum TypeError {
         found: RcType,
     },
     ExpectedPairType {
+        found: RcType,
+    },
+    ExpectedCaseType {
+        found: RcType,
+    },
+    ExpectedLabelInCaseType {
+        label: Label,
         found: RcType,
     },
     ExpectedUniverse {
@@ -104,6 +111,22 @@ pub fn check(env: &Env, size: u32, term: &RcTerm, ann: &RcType) -> Result<(), Ty
             },
             _ => Err(TypeError::ExpectedPairType { found: ann.clone() }),
         },
+
+        Term::CaseType(ref choices) => unimplemented!("check: Term::CaseType"),
+        Term::CaseIntro(ref label, ref term) => match *ann.inner {
+            Value::CaseType(ref clo) => match clo.choices.iter().find(|&(ref l, _)| l == label) {
+                Some(&(_, ref choice_ty)) => {
+                    let choice_ty = nbe::eval(choice_ty, &env_to_domain_env(env))?;
+                    check(env, size, term, &choice_ty)
+                },
+                None => Err(TypeError::ExpectedLabelInCaseType {
+                    label: label.clone(),
+                    found: ann.clone(),
+                }),
+            },
+            _ => Err(TypeError::ExpectedCaseType { found: ann.clone() }),
+        },
+        Term::CaseSplit(ref choices) => unimplemented!("check: Term::CaseSplit"),
 
         Term::Universe(term_level) => match *ann.inner {
             Value::Universe(ann_level) if term_level < ann_level => Ok(()),

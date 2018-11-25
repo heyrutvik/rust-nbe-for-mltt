@@ -4,7 +4,7 @@ use im;
 use std::rc::Rc;
 
 use syntax::core::RcTerm;
-use syntax::{DbLevel, IdentHint, UniverseLevel};
+use syntax::{DbLevel, Label, IdentHint, UniverseLevel};
 
 pub type Env = im::Vector<RcValue>;
 
@@ -12,6 +12,12 @@ pub type Env = im::Vector<RcValue>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     pub term: RcTerm,
+    pub env: Env,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChoiceClosure {
+    pub choices: Rc<[(Label, RcTerm)]>,
     pub env: Env,
 }
 
@@ -57,6 +63,13 @@ pub enum Value {
     PairType(IdentHint, RcType, Closure),
     /// Introduce a pair
     PairIntro(RcValue, RcValue),
+
+    /// Case type
+    CaseType(ChoiceClosure),
+    /// Case introduction
+    CaseIntro(Label, RcValue),
+    /// Case split
+    CaseSplit(ChoiceClosure),
 
     /// Universe of types
     Universe(UniverseLevel),
