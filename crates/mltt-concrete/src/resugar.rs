@@ -1,4 +1,4 @@
-use mltt_core::syntax::{core, DbIndex, IdentHint, UniverseLevel};
+use mltt_core::syntax::{core, DbIndex, IdentHint, UniverseLevel, UniverseShift};
 
 use crate::syntax::concrete;
 
@@ -103,7 +103,10 @@ pub fn resugar_env(term: &core::RcTerm, env: &mut Env) -> concrete::Term {
 
     fn resugar_atomic(term: &core::RcTerm, env: &mut Env) -> concrete::Term {
         match *term.inner {
-            core::Term::Var(index) => concrete::Term::Var(env.lookup_index(index)),
+            core::Term::Var(index, shift) => match shift {
+                UniverseShift(0) => concrete::Term::Var(env.lookup_index(index), None),
+                UniverseShift(shift) => concrete::Term::Var(env.lookup_index(index), Some(shift)),
+            },
             core::Term::PairIntro(ref fst, ref snd) => concrete::Term::PairIntro(
                 Box::new(resugar_term(fst, env)),
                 Box::new(resugar_term(snd, env)),

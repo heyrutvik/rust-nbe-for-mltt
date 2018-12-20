@@ -2,9 +2,11 @@
 //!
 //! The core, domain, and normal syntaxes are mainly based off Mini-TT
 
+use std::ops::{Add, AddAssign};
+
+pub mod core;
 pub mod domain;
 pub mod normal;
-pub mod core;
 
 /// A name hint that can be used for pretty printing later on
 ///
@@ -44,3 +46,21 @@ pub struct DbIndex(pub u32);
 /// The level of a universe
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniverseLevel(pub u32);
+
+/// A shift in the level of a universe
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct UniverseShift(pub u32);
+
+impl Add<UniverseShift> for UniverseLevel {
+    type Output = UniverseLevel;
+
+    fn add(self, other: UniverseShift) -> UniverseLevel {
+        UniverseLevel(self.0 + other.0)
+    }
+}
+
+impl AddAssign<UniverseShift> for UniverseLevel {
+    fn add_assign(&mut self, other: UniverseShift) {
+        self.0 += other.0;
+    }
+}

@@ -16,7 +16,7 @@ pub enum Item {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     /// Variables
-    Var(String),
+    Var(String, Option<u32>),
     /// Let bindings
     Let(String, Box<Term>, Box<Term>),
     /// A term that is explicitly annotated with a type
@@ -156,7 +156,10 @@ impl Term {
 
         fn to_doc_atomic(term: &Term) -> Doc<BoxDoc<()>> {
             match *term {
-                Term::Var(ref ident) => Doc::as_string(ident),
+                Term::Var(ref ident, None) => Doc::as_string(ident),
+                Term::Var(ref ident, Some(shift)) => {
+                    Doc::as_string(format!("{}^{}", ident, shift))
+                },
                 Term::Parens(ref term) => Doc::text("(").append(to_doc_term(term)).append(")"),
                 Term::PairIntro(ref fst, ref snd) => Doc::nil()
                     .append("<")

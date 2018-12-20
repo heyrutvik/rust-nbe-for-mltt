@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use crate::syntax::{DbIndex, IdentHint, UniverseLevel};
+use crate::syntax::{DbIndex, IdentHint, UniverseLevel, UniverseShift};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RcNormal {
@@ -19,8 +19,8 @@ impl From<Normal> for RcNormal {
 
 impl RcNormal {
     /// Construct a variable
-    pub fn var(level: impl Into<DbIndex>) -> RcNormal {
-        RcNormal::from(Normal::var(level))
+    pub fn var(level: DbIndex, shift: UniverseShift) -> RcNormal {
+        RcNormal::from(Normal::var(level, shift))
     }
 }
 
@@ -51,8 +51,8 @@ pub enum Normal {
 
 impl Normal {
     /// Construct a variable
-    pub fn var(level: impl Into<DbIndex>) -> Normal {
-        Normal::Neutral(RcNeutral::from(Neutral::Var(level.into())))
+    pub fn var(level: DbIndex, shift: UniverseShift) -> Normal {
+        Normal::Neutral(RcNeutral::from(Neutral::Var(level, shift)))
     }
 }
 
@@ -76,7 +76,7 @@ impl From<Neutral> for RcNeutral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Neutral {
     /// Variables
-    Var(DbIndex),
+    Var(DbIndex, UniverseShift),
 
     /// Apply a function to an argument
     FunApp(RcNeutral, RcNormal),

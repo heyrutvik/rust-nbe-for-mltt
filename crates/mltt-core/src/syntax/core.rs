@@ -4,7 +4,7 @@ use pretty::{BoxDoc, Doc};
 use std::rc::Rc;
 
 use crate::syntax::normal::{Neutral, Normal, RcNeutral, RcNormal};
-use crate::syntax::{DbIndex, IdentHint, UniverseLevel};
+use crate::syntax::{DbIndex, IdentHint, UniverseLevel, UniverseShift};
 
 pub type Env = im::Vector<RcTerm>;
 
@@ -25,7 +25,7 @@ impl From<Term> for RcTerm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term {
     /// Variables
-    Var(DbIndex),
+    Var(DbIndex, UniverseShift),
     /// Let bindings
     Let(IdentHint, RcTerm, RcTerm),
     /// A term that is explicitly annotated with a type
@@ -82,7 +82,7 @@ impl<'a> From<&'a RcNormal> for RcTerm {
 impl<'a> From<&'a RcNeutral> for RcTerm {
     fn from(src: &'a RcNeutral) -> RcTerm {
         match *src.inner {
-            Neutral::Var(index) => RcTerm::from(Term::Var(index)),
+            Neutral::Var(index, shift) => RcTerm::from(Term::Var(index, shift)),
             Neutral::FunApp(ref fun, ref arg) => {
                 RcTerm::from(Term::FunApp(RcTerm::from(fun), RcTerm::from(arg)))
             },
@@ -190,7 +190,9 @@ impl Term {
 
         fn to_doc_atomic(term: &Term) -> Doc<BoxDoc<()>> {
             match *term {
-                Term::Var(DbIndex(index)) => Doc::as_string(format!("@{}", index)),
+                Term::Var(DbIndex(index), UniverseShift(shift)) => {
+                    Doc::as_string(format!("@{}^{}", index, shift))
+                },
                 Term::PairIntro(ref fst, ref snd) => Doc::nil()
                     .append("<")
                     .append(to_doc_term(&*fst.inner))

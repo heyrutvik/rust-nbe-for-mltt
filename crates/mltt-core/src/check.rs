@@ -3,7 +3,7 @@ use im;
 use crate::nbe::{self, NbeError};
 use crate::syntax::core::{RcTerm, Term};
 use crate::syntax::domain::{self, RcType, RcValue, Value};
-use crate::syntax::{DbIndex, DbLevel, UniverseLevel};
+use crate::syntax::{DbIndex, DbLevel, UniverseLevel, UniverseShift};
 
 #[derive(Debug, Clone)]
 pub enum Entry {
@@ -74,7 +74,7 @@ pub fn check(env: &Env, size: u32, term: &RcTerm, expected_ty: &RcType) -> Resul
 
             let mut body_ty_env = env.clone();
             body_ty_env.push_front(Entry::Term {
-                term: RcValue::var(DbLevel(size)),
+                term: RcValue::var(DbLevel(size), UniverseShift(0)),
                 ann: ann_ty_value,
             });
 
@@ -82,7 +82,7 @@ pub fn check(env: &Env, size: u32, term: &RcTerm, expected_ty: &RcType) -> Resul
         },
         Term::FunIntro(_, ref body) => match *expected_ty.inner {
             Value::FunType(_, ref param_ty, ref body_ty) => {
-                let param = RcValue::var(DbLevel(size));
+                let param = RcValue::var(DbLevel(size), UniverseShift(0));
                 let body_ty = nbe::do_closure_app(body_ty, param.clone())?;
 
                 let mut body_env = env.clone();
@@ -124,10 +124,12 @@ pub fn check(env: &Env, size: u32, term: &RcTerm, expected_ty: &RcType) -> Resul
 /// Synthesize the type of the term
 pub fn synth(env: &Env, size: u32, term: &RcTerm) -> Result<RcType, TypeError> {
     match *term.inner {
-        Term::Var(DbIndex(index)) => match env.get(index as usize) {
+        Term::Var(DbIndex(index), shift) => match env.get(index as usize) {
             None => Err(TypeError::UnboundVariable),
             Some(Entry::Term { ref ann, .. }) | Some(Entry::TopLevel { ref ann, .. }) => {
-                Ok(ann.clone())
+                let mut ann = ann.clone();
+                ann.shift_universe(shift);
+                Ok(ann)
             },
         },
         Term::Let(_, ref def, ref body) => {
@@ -207,7 +209,7 @@ pub fn check_ty(env: &Env, size: u32, term: &RcTerm) -> Result<(), TypeError> {
 
             let mut body_env = env.clone();
             body_env.push_front(Entry::Term {
-                term: RcValue::var(DbLevel(size)),
+                term: RcValue::var(DbLevel(size), UniverseShift(0)),
                 ann: ann_value,
             });
 

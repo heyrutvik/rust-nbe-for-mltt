@@ -1,4 +1,4 @@
-use mltt_core::syntax::{core, DbIndex, IdentHint, UniverseLevel};
+use mltt_core::syntax::{core, DbIndex, IdentHint, UniverseLevel, UniverseShift};
 
 use crate::syntax::concrete;
 
@@ -45,9 +45,12 @@ fn desugar_env<'a>(
     env: &mut Env<'a>,
 ) -> Result<core::RcTerm, DesugarError> {
     match *term {
-        concrete::Term::Var(ref ident) => match env.lookup_ident(ident) {
+        concrete::Term::Var(ref ident, shift) => match env.lookup_ident(ident) {
             None => Err(DesugarError::UnboundVar(ident.clone())),
-            Some(index) => Ok(core::RcTerm::from(core::Term::Var(index))),
+            Some(index) => {
+                let shift = UniverseShift(shift.unwrap_or(0));
+                Ok(core::RcTerm::from(core::Term::Var(index, shift)))
+            },
         },
         concrete::Term::Let(ref ident, ref def, ref body) => {
             let ident_hint = IdentHint(Some(ident.clone()));
@@ -117,7 +120,9 @@ fn desugar_env<'a>(
         // Universes
         concrete::Term::Universe(level) => match level {
             None => Ok(core::RcTerm::from(core::Term::Universe(UniverseLevel(0)))),
-            Some(level) => Ok(core::RcTerm::from(core::Term::Universe(UniverseLevel(level)))),
+            Some(level) => Ok(core::RcTerm::from(core::Term::Universe(UniverseLevel(
+                level,
+            )))),
         },
     }
 }

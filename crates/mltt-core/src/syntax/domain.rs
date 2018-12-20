@@ -4,20 +4,24 @@ use im;
 use std::rc::Rc;
 
 use crate::syntax::core::RcTerm;
-use crate::syntax::{DbLevel, IdentHint, UniverseLevel};
+use crate::syntax::{DbLevel, IdentHint, UniverseLevel, UniverseShift};
 
 pub type Env = im::Vector<RcValue>;
 
 /// A closure that binds a variable
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
+    // pub shift: UniverseShift,
     pub term: RcTerm,
     pub env: Env,
 }
 
 impl Closure {
-    pub fn new(term: RcTerm, env: Env) -> Closure {
-        Closure { term, env }
+    pub fn new(/*shift: UniverseShift,*/ term: RcTerm, env: Env) -> Closure {
+        Closure {
+            /*shift,*/ term,
+            env,
+        }
     }
 }
 
@@ -36,8 +40,13 @@ impl From<Value> for RcValue {
 
 impl RcValue {
     /// Construct a variable
-    pub fn var(level: impl Into<DbLevel>) -> RcValue {
-        RcValue::from(Value::var(level))
+    pub fn var(level: DbLevel, shift: UniverseShift) -> RcValue {
+        RcValue::from(Value::var(level, shift))
+    }
+
+    /// Shift universes
+    pub fn shift_universe(&mut self, shift: UniverseShift) {
+        Rc::make_mut(&mut self.inner).shift_universe(shift);
     }
 }
 
@@ -66,8 +75,29 @@ pub enum Value {
 
 impl Value {
     /// Construct a variable
-    pub fn var(level: impl Into<DbLevel>) -> Value {
-        Value::Neutral(RcNeutral::from(Neutral::Var(level.into())))
+    pub fn var(level: DbLevel, shift: UniverseShift) -> Value {
+        Value::Neutral(RcNeutral::from(Neutral::Var(level, shift)))
+    }
+
+    /// Shift universes
+    pub fn shift_universe(&mut self, shift: UniverseShift) {
+        match *self {
+            Value::Neutral(ref mut neutral) => neutral.shift_universe(shift),
+            Value::FunType(_, ref mut param_ty, ref mut body_ty) => {
+                param_ty.shift_universe(shift);
+                unimplemented!()
+            },
+            Value::FunIntro(_, ref mut body) => unimplemented!(),
+            Value::PairType(_, ref mut fst_ty, ref mut snd_ty) => {
+                fst_ty.shift_universe(shift);
+                unimplemented!()
+            },
+            Value::PairIntro(ref mut fst, ref mut snd) => {
+                fst.shift_universe(shift);
+                snd.shift_universe(shift);
+            },
+            Value::Universe(ref mut level) => *level += shift,
+        }
     }
 }
 
@@ -82,6 +112,13 @@ pub type RcType = RcValue;
 #[derive(Debug, Clone, PartialEq)]
 pub struct RcNeutral {
     pub inner: Rc<Neutral>,
+}
+
+impl RcNeutral {
+    /// Shift universes
+    pub fn shift_universe(&mut self, shift: UniverseShift) {
+        Rc::make_mut(&mut self.inner).shift_universe(shift);
+    }
 }
 
 impl From<Neutral> for RcNeutral {
@@ -99,7 +136,7 @@ impl From<Neutral> for RcNeutral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Neutral {
     /// Variables
-    Var(DbLevel),
+    Var(DbLevel, UniverseShift),
 
     /// Apply a function to an argument
     FunApp(RcNeutral, RcValue),
@@ -108,4 +145,19 @@ pub enum Neutral {
     PairFst(RcNeutral),
     /// Project the second element of a pair
     PairSnd(RcNeutral),
+}
+
+impl Neutral {
+    /// Shift universes
+    pub fn shift_universe(&mut self, shift: UniverseShift) {
+        match *self {
+            Neutral::Var(..) => {},
+            Neutral::FunApp(ref mut fun, ref mut arg) => {
+                fun.shift_universe(shift);
+                arg.shift_universe(shift);
+            },
+            Neutral::PairFst(ref mut pair) => pair.shift_universe(shift),
+            Neutral::PairSnd(ref mut pair) => pair.shift_universe(shift),
+        }
+    }
 }

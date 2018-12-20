@@ -7,7 +7,7 @@
 use crate::syntax::core::{self, RcTerm, Term};
 use crate::syntax::domain::{self, Closure, RcType, RcValue, Value};
 use crate::syntax::normal::{self, Normal, RcNormal};
-use crate::syntax::{DbIndex, DbLevel};
+use crate::syntax::{DbIndex, DbLevel, UniverseShift};
 
 /// An error produced during normalization
 ///
@@ -72,7 +72,7 @@ pub fn do_fun_app(fun: &RcValue, arg: RcValue) -> Result<RcValue, NbeError> {
 /// Evaluate a syntactic term into a semantic value
 pub fn eval(term: &RcTerm, env: &domain::Env) -> Result<RcValue, NbeError> {
     match *term.inner {
-        Term::Var(DbIndex(index)) => match env.get(index as usize) {
+        Term::Var(DbIndex(index), shift) => match env.get(index as usize) {
             Some(value) => Ok(value.clone()),
             None => Err(NbeError::new("eval: variable not found")),
         },
@@ -133,7 +133,7 @@ pub fn read_back_term(size: u32, term: &RcValue) -> Result<RcNormal, NbeError> {
 
         // Functions
         Value::FunType(ref ident, ref param_ty, ref body_ty) => {
-            let param = RcValue::var(DbLevel(size));
+            let param = RcValue::var(DbLevel(size), UniverseShift(0));
             let param_ty = param_ty.clone();
             let body_ty = do_closure_app(body_ty, param)?;
 
@@ -144,7 +144,7 @@ pub fn read_back_term(size: u32, term: &RcValue) -> Result<RcNormal, NbeError> {
             )))
         },
         Value::FunIntro(ref ident, ref body) => {
-            let param = RcValue::var(DbLevel(size));
+            let param = RcValue::var(DbLevel(size), UniverseShift(0));
             let body = read_back_term(size + 1, &do_closure_app(body, param.clone())?)?;
 
             Ok(RcNormal::from(Normal::FunIntro(ident.clone(), body)))
@@ -152,7 +152,7 @@ pub fn read_back_term(size: u32, term: &RcValue) -> Result<RcNormal, NbeError> {
 
         // Pairs
         Value::PairType(ref ident, ref fst_ty, ref snd_ty) => {
-            let fst = RcValue::var(DbLevel(size));
+            let fst = RcValue::var(DbLevel(size), UniverseShift(0));
             let fst_ty = fst_ty.clone();
             let snd_ty = do_closure_app(snd_ty, fst)?;
 
@@ -180,10 +180,10 @@ pub fn read_back_neutral(
     neutral: &domain::RcNeutral,
 ) -> Result<normal::RcNeutral, NbeError> {
     match &*neutral.inner {
-        domain::Neutral::Var(DbLevel(level)) => {
+        domain::Neutral::Var(DbLevel(level), shift) => {
             let index = DbIndex(size - level);
 
-            Ok(normal::RcNeutral::from(normal::Neutral::Var(index)))
+            Ok(normal::RcNeutral::from(normal::Neutral::Var(index, *shift)))
         },
         domain::Neutral::FunApp(ref fun, ref arg) => {
             let fun = read_back_neutral(size, fun)?;
@@ -217,7 +217,7 @@ pub fn check_subtype(size: u32, ty1: &RcType, ty2: &RcType) -> Result<bool, NbeE
             &Value::FunType(_, ref param_ty1, ref body_ty1),
             &Value::FunType(_, ref param_ty2, ref body_ty2),
         ) => {
-            let param = RcValue::var(DbLevel(size));
+            let param = RcValue::var(DbLevel(size), UniverseShift(0));
 
             Ok(check_subtype(size, param_ty2, param_ty1)? && {
                 let body_ty1 = do_closure_app(body_ty1, param.clone())?;
@@ -229,7 +229,7 @@ pub fn check_subtype(size: u32, ty1: &RcType, ty2: &RcType) -> Result<bool, NbeE
             &Value::PairType(_, ref fst_ty1, ref snd_ty1),
             &Value::PairType(_, ref fst_ty2, ref snd_ty2),
         ) => {
-            let fst = RcValue::var(DbLevel(size));
+            let fst = RcValue::var(DbLevel(size), UniverseShift(0));
 
             Ok(check_subtype(size, fst_ty1, fst_ty2)? && {
                 let snd_ty1 = do_closure_app(snd_ty1, fst.clone())?;
@@ -248,7 +248,7 @@ fn initial_env(env: &core::Env) -> Result<domain::Env, NbeError> {
 
     for _ in env {
         let index = DbLevel((env.len() - new_env.len()) as u32);
-        let ann = RcValue::var(index);
+        let ann = RcValue::var(index, UniverseShift(0));
         new_env.push_front(ann);
     }
 
