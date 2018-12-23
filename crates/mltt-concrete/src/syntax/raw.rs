@@ -6,6 +6,29 @@ use std::rc::Rc;
 use mltt_core::syntax::UniverseLevel;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RcPattern {
+    pub inner: Rc<Pattern>,
+}
+
+impl From<Pattern> for RcPattern {
+    fn from(src: Pattern) -> RcPattern {
+        RcPattern {
+            inner: Rc::new(src),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pattern {
+    /// Variable pattern
+    Var(String),
+    /// A pattern that is explicitly annotated with a type
+    Ann(RcPattern, RcTerm),
+    /// Pair pattern
+    PairIntro(RcPattern, RcPattern),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RcTerm {
     pub inner: Rc<Term>,
 }
@@ -25,6 +48,8 @@ pub enum Term {
     Var(String),
     /// Let bindings
     Let(String, RcTerm, RcTerm),
+    /// Case expressions
+    Case(Vec<RcTerm>, Vec<(Vec<RcPattern>, RcTerm)>),
     /// A term that is explicitly annotated with a type
     Ann(RcTerm, RcTerm),
 
@@ -162,9 +187,7 @@ impl Term {
                     .append(">"),
                 Term::PairFst(ref pair) => to_doc_atomic(&*pair.inner).append(".1"),
                 Term::PairSnd(ref pair) => to_doc_atomic(&*pair.inner).append(".2"),
-                Term::Universe(UniverseLevel(level)) => {
-                    Doc::text("Type^").append(Doc::as_string(level))
-                },
+                Term::Universe(UniverseLevel(level)) => Doc::as_string(format!("Type^{}", level)),
                 _ => Doc::text("(").append(to_doc_term(term)).append(")"),
             }
         }

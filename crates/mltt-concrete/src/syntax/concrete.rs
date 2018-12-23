@@ -12,6 +12,16 @@ pub enum Item {
     Quit,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// Variable pattern
+    Var(String),
+    /// A pattern that is explicitly annotated with a type
+    Ann(Box<Pattern>, Box<Term>),
+    /// Pair pattern
+    PairIntro(Box<Pattern>, Box<Pattern>),
+}
+
 /// Concrete terms
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
@@ -19,6 +29,8 @@ pub enum Term {
     Var(String),
     /// Let bindings
     Let(String, Box<Term>, Box<Term>),
+    /// Case expressions
+    Case(Vec<Term>, Vec<(Vec<Pattern>, Term)>),
     /// A term that is explicitly annotated with a type
     Ann(Box<Term>, Box<Term>),
     /// A parenthesized term
