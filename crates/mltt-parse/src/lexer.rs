@@ -148,7 +148,7 @@ impl<'file> Lexer<'file> {
     }
 
     /// Emit a token and reset the start position, ready for the next token
-    fn emit(&mut self, kind: TokenKind) -> Token<'file> {
+    fn emit(&mut self, kind: TokenKind) -> Token<&'file str> {
         let slice = self.token_slice();
         let span = self.token_span();
         self.token_start = self.token_end;
@@ -463,9 +463,9 @@ impl<'file> Lexer<'file> {
 }
 
 impl<'file> Iterator for Lexer<'file> {
-    type Item = Token<'file>;
+    type Item = Token<&'file str>;
 
-    fn next(&mut self) -> Option<Token<'file>> {
+    fn next(&mut self) -> Option<Token<&'file str>> {
         let consumed = self.consume_token().map(|tag| self.emit(tag));
         match consumed {
             None => log::debug!("eof"),

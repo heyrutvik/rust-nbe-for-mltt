@@ -45,26 +45,32 @@ pub enum TokenKind {
 
 /// A token in the source file, to be emitted by the `Lexer`
 #[derive(Clone, PartialEq, Eq)]
-pub struct Token<'file> {
+pub struct Token<Slice> {
     /// The token kind
     pub kind: TokenKind,
     /// The slice of source code that produced the token
-    pub slice: &'file str,
+    pub slice: Slice,
     /// The span in the source code
     pub span: FileSpan,
 }
 
-impl Token<'_> {
+impl<Slice> Token<Slice> {
     pub fn is_whitespace(&self) -> bool {
         self.kind == TokenKind::Whitespace || self.kind == TokenKind::LineComment
     }
 
-    pub fn is_keyword(&self, slice: &str) -> bool {
-        self.kind == TokenKind::Keyword && self.slice == slice
+    pub fn is_keyword(&self, slice: &Slice) -> bool
+    where
+        Slice: PartialEq,
+    {
+        self.kind == TokenKind::Keyword && self.slice == *slice
     }
 }
 
-impl fmt::Debug for Token<'_> {
+impl<Slice> fmt::Debug for Token<Slice>
+where
+    Slice: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
