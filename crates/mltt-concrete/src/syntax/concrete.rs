@@ -8,6 +8,8 @@ use super::Literal;
 /// Top-level items in a module
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
+    /// An error
+    Error,
     /// Forward-declarations
     Declaration {
         docs: Vec<String>,
@@ -26,6 +28,9 @@ pub enum Item {
 /// Concrete terms
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
+    /// An error
+    Error,
+
     /// Variables
     Var(String),
     /// Literals
@@ -193,6 +198,7 @@ impl Term {
 
         fn to_doc_atomic(term: &Term) -> Doc<BoxDoc<()>> {
             match term {
+                Term::Error => Doc::text("<error>"),
                 Term::Var(name) => Doc::as_string(name),
                 Term::Literal(literal) => literal.to_doc(),
                 Term::Parens(term) => Doc::text("(").append(to_doc_term(term)).append(")"),

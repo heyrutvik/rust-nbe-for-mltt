@@ -35,6 +35,9 @@ impl fmt::Display for RcTerm {
 /// Raw terms
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term {
+    /// An error
+    Error,
+
     /// Variables
     Var(String),
     /// Literals
@@ -181,6 +184,7 @@ impl Term {
 
         fn to_doc_atomic(term: &Term) -> Doc<BoxDoc<()>> {
             match term {
+                Term::Error => Doc::text("<error>"),
                 Term::Var(name) => Doc::as_string(name),
                 Term::Literal(literal) => literal.to_doc(),
                 Term::PairFst(pair) => to_doc_atomic(pair.as_ref()).append(".1"),
