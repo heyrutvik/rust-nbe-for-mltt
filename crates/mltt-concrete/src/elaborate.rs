@@ -10,7 +10,7 @@
 
 use im;
 use mltt_core::nbe::{self, NbeError};
-use mltt_core::syntax::{core, domain, normal, DbIndex, DbLevel, UniverseLevel};
+use mltt_core::syntax::{core, domain, DbIndex, DbLevel, UniverseLevel};
 use std::error::Error;
 use std::fmt;
 
@@ -96,8 +96,12 @@ impl<'term> Context<'term> {
     }
 
     /// Read back a value into normal form
-    pub fn read_back(&self, value: &domain::RcValue) -> Result<normal::RcNormal, NbeError> {
-        nbe::read_back_term(self.level(), value)
+    pub fn read_back(&self, value: &domain::RcValue) -> Result<core::RcTerm, NbeError> {
+        // NOTE: Not sure how expensive this readback is here! We should
+        // definitely investigate fusing the conversion between
+        // `Value -> Normal -> Term`, perhaps by using visitors...
+        let normal = nbe::read_back_term(self.level(), value)?;
+        Ok(core::RcTerm::from(&normal))
     }
 
     /// Expect that `ty1` is a subtype of `ty2` in the current context
@@ -266,11 +270,7 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
                     },
                 };
                 let value = context.eval(&term)?;
-                // NOTE: Not sure how expensive this readback is here! We should
-                // definitely investigate fusing the conversion between
-                // `value::Value -> normal::Normal -> core::Term` by way of
-                // visitors...
-                let term_ty = core::RcTerm::from(&context.read_back(&ty)?);
+                let term_ty = context.read_back(&ty)?;
 
                 log::trace!("elaborated declaration:\t{}\t: {}", name, term_ty);
                 log::trace!("elaborated definition:\t{}\t= {}", name, term);
@@ -334,10 +334,12 @@ fn check_fun_intro<'term>(
     expected_ty: &domain::RcType,
 ) -> Result<core::RcTerm, TypeError> {
     let mut context = context.clone();
+    let mut param_tys = Vec::new();
     let mut expected_ty = expected_ty.clone();
 
     for param_name in param_names.iter() {
         if let domain::Value::FunType(param_ty, body_ty) = expected_ty.as_ref() {
+            param_tys.push(context.read_back(&param_ty)?);
             let param = context.insert_binder(param_name, param_ty.clone());
             expected_ty = nbe::do_closure_app(body_ty, param)?;
         } else {
@@ -348,9 +350,9 @@ fn check_fun_intro<'term>(
 
     let body = check_ann(&context, concrete_body, concrete_body_ty, &expected_ty)?;
 
-    Ok(param_names
-        .iter()
-        .fold(body, |acc, _| core::RcTerm::from(core::Term::FunIntro(acc))))
+    Ok(param_tys.into_iter().rev().fold(body, |acc, param_ty| {
+        core::RcTerm::from(core::Term::FunIntro(param_ty, acc))
+    }))
 }
 
 /// Synthesize the type of a function introduction
@@ -367,12 +369,7 @@ fn synth_fun_intro<'term>(
 
     let (body, body_ty) = synth_ann(&context, concrete_body, concrete_body_ty)?;
 
-    Ok((
-        param_names
-            .iter()
-            .fold(body, |acc, _| core::RcTerm::from(core::Term::FunIntro(acc))),
-        body_ty,
-    ))
+    Ok((body, body_ty))
 }
 
 /// Ensures that the given term is a universe, returning the level of that

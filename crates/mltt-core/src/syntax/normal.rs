@@ -47,7 +47,7 @@ pub enum Normal {
     /// Dependent function types
     FunType(RcNormal, RcNormal),
     /// Introduce a function
-    FunIntro(RcNormal),
+    FunIntro(RcNormal, RcNormal),
 
     /// Dependent pair types
     PairType(RcNormal, RcNormal),

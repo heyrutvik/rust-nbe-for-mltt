@@ -71,7 +71,7 @@ pub fn do_closure_app(closure: &Closure, arg: RcValue) -> Result<RcValue, NbeErr
 /// Apply a function to an argument
 pub fn do_fun_app(fun: &RcValue, arg: RcValue) -> Result<RcValue, NbeError> {
     match fun.as_ref() {
-        Value::FunIntro(body) => do_closure_app(body, arg),
+        Value::FunIntro(_, body) => do_closure_app(body, arg),
         Value::Neutral(fun) => {
             let body = domain::RcNeutral::from(domain::Neutral::FunApp(fun.clone(), arg.clone()));
             Ok(RcValue::from(Value::Neutral(body)))
@@ -102,10 +102,11 @@ pub fn eval(term: &RcTerm, env: &domain::Env) -> Result<RcValue, NbeError> {
 
             Ok(RcValue::from(Value::FunType(param_ty, body_ty)))
         },
-        Term::FunIntro(/*  _, */ body) => {
+        Term::FunIntro(param_ty, body) => {
+            let param_ty = eval(param_ty, env)?;
             let body = Closure::new(body.clone(), env.clone());
 
-            Ok(RcValue::from(Value::FunIntro(body)))
+            Ok(RcValue::from(Value::FunIntro(param_ty, body)))
         },
         Term::FunApp(fun, arg) => do_fun_app(&eval(fun, env)?, eval(arg, env)?),
 
@@ -153,11 +154,12 @@ pub fn read_back_term(level: DbLevel, term: &RcValue) -> Result<RcNormal, NbeErr
                 read_back_term(level + 1, &body_ty)?,
             )))
         },
-        Value::FunIntro(body) => {
+        Value::FunIntro(param_ty, body) => {
             let param = RcValue::var(level);
+            let param_ty = read_back_term(level, &param_ty)?;
             let body = read_back_term(level + 1, &do_closure_app(body, param.clone())?)?;
 
-            Ok(RcNormal::from(Normal::FunIntro(body)))
+            Ok(RcNormal::from(Normal::FunIntro(param_ty, body)))
         },
 
         // Pairs

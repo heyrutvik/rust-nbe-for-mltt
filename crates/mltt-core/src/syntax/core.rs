@@ -56,7 +56,7 @@ pub enum Term {
     /// Dependent function types
     FunType(RcTerm, RcTerm),
     /// Introduce a function
-    FunIntro(/* RcTerm, */ RcTerm),
+    FunIntro(RcTerm, RcTerm),
     /// Apply a function to an argument
     FunApp(RcTerm, RcTerm),
 
@@ -123,10 +123,16 @@ impl Term {
                     .append("->")
                     .append(Doc::space())
                     .append(to_doc_app(body_ty.as_ref())),
-                Term::FunIntro(body) => Doc::nil()
+                Term::FunIntro(param_ty, body) => Doc::nil()
                     .append("fun")
                     .append(Doc::space())
+                    .append("(")
                     .append("_")
+                    .append(Doc::space())
+                    .append(":")
+                    .append(Doc::space())
+                    .append(to_doc_term(param_ty.as_ref()))
+                    .append(")")
                     .append(Doc::space())
                     .append("=>")
                     .append(Doc::space())
@@ -208,7 +214,9 @@ impl From<&'_ normal::Normal> for RcTerm {
             normal::Normal::FunType(param_ty, body_ty) => {
                 Term::FunType(RcTerm::from(param_ty), RcTerm::from(body_ty))
             },
-            normal::Normal::FunIntro(body) => Term::FunIntro(RcTerm::from(body)),
+            normal::Normal::FunIntro(param_ty, body) => {
+                Term::FunIntro(RcTerm::from(param_ty), RcTerm::from(body))
+            },
             normal::Normal::PairType(fst_ty, snd_ty) => {
                 Term::PairType(RcTerm::from(fst_ty), RcTerm::from(snd_ty))
             },
