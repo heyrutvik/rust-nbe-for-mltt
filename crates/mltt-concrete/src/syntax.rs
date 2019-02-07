@@ -27,7 +27,7 @@ pub enum Item {
     Definition {
         docs: Vec<String>,
         name: String,
-        param_names: Vec<String>,
+        patterns: Vec<Pattern>,
         body_ty: Option<Term>,
         body: Term,
     },
@@ -39,6 +39,35 @@ impl Item {
             Item::Declaration { .. } => false,
             Item::Definition { .. } => true,
         }
+    }
+}
+
+/// Concrete patterns
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// Variable patterns
+    Var(String),
+    // TODO:
+    // /// Literal patterns
+    // Literal(Literal),
+    // /// Patterns with an explicit type annotation
+    // Ann(Box<Pattern>, Box<Term>),
+    // /// Pair patterns
+    // PairIntro(Box<Pattern>, Box<Pattern>),
+}
+
+impl Pattern {
+    /// Convert the pattern into a pretty-printable document
+    pub fn to_doc(&self) -> Doc<BoxDoc<()>> {
+        match self {
+            Pattern::Var(name) => Doc::as_string(name),
+        }
+    }
+}
+
+impl fmt::Display for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.to_doc().group().pretty(1_000_000_000).fmt(f)
     }
 }
 
@@ -95,7 +124,7 @@ pub enum Term {
     /// Introduce a function
     ///
     /// Also known as a _lambda expression_ or _anonymous function_.
-    FunIntro(Vec<String>, Box<Term>),
+    FunIntro(Vec<Pattern>, Box<Term>),
     /// Apply a function to an argument
     FunApp(Box<Term>, Vec<Term>),
 
@@ -176,7 +205,7 @@ impl Term {
                     .append("fun")
                     .append(Doc::space())
                     .append(Doc::intersperse(
-                        param_names.iter().map(Doc::text),
+                        param_names.iter().map(Pattern::to_doc),
                         Doc::space(),
                     ))
                     .append(Doc::space())

@@ -14,7 +14,7 @@ use mltt_core::syntax::{core, domain, normal, DbIndex, DbLevel, UniverseLevel};
 use std::error::Error;
 use std::fmt;
 
-use crate::syntax::{Item, Term};
+use crate::syntax::{Item, Pattern, Term};
 
 /// Local elaboration context
 #[derive(Debug, Clone, PartialEq)]
@@ -230,7 +230,7 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
             Item::Definition {
                 docs,
                 name,
-                param_names,
+                patterns,
                 body_ty,
                 body,
             } => {
@@ -242,7 +242,7 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
                     // its type instead
                     Entry::Vacant(entry) => {
                         let docs = concat_docs(docs);
-                        let (term, ty) = synth_fun_intro(&context, param_names, body_ty, body)?;
+                        let (term, ty) = synth_clause(&context, patterns, body_ty, body)?;
                         entry.insert(None);
                         (docs, term, ty)
                     },
@@ -253,7 +253,7 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
                         // basis for checking the definition
                         Some((decl_docs, ty)) => {
                             let docs = merge_docs(name, decl_docs, docs)?;
-                            let term = check_fun_intro(&context, param_names, body_ty, body, &ty)?;
+                            let term = check_clause(&context, patterns, body_ty, body, &ty)?;
                             (docs, term, ty)
                         },
                         // This declaration was already given a definition, so
@@ -325,42 +325,51 @@ fn synth_ann<'term>(
     }
 }
 
-/// Check that a function introduction conforms to an expected type
-fn check_fun_intro<'term>(
+/// Check that a given pattern clause conforms to an expected type
+fn check_clause<'term>(
     context: &Context<'term>,
-    param_names: &'term [String],
+    mut patterns: &'term [Pattern],
     concrete_body_ty: Option<&'term Term>,
     concrete_body: &'term Term,
     expected_ty: &domain::RcType,
 ) -> Result<core::RcTerm, TypeError> {
     let mut context = context.clone();
+    let mut param_tys = Vec::new();
     let mut expected_ty = expected_ty.clone();
 
-    for param_name in param_names.iter() {
-        if let domain::Value::FunType(param_ty, body_ty) = expected_ty.as_ref() {
-            let param = context.insert_binder(param_name, param_ty.clone());
-            expected_ty = nbe::do_closure_app(body_ty, param)?;
-        } else {
-            let found = expected_ty.clone();
-            return Err(TypeError::ExpectedFunType { found });
+    while let Some((head_pattern, rest_patterns)) = patterns.split_first() {
+        patterns = rest_patterns;
+        match (head_pattern, expected_ty.as_ref()) {
+            // INTRO: If it is a variable a pattern, and we're expecting a function
+            // type, then we'll elaborate to a function.
+            (Pattern::Var(var_name), domain::Value::FunType(param_ty, body_ty)) => {
+                param_tys.push(param_ty.clone());
+                let param = context.insert_binder(var_name, param_ty.clone());
+                expected_ty = nbe::do_closure_app(&body_ty, param.clone())?;
+            },
+            _ => {
+                let found = expected_ty.clone();
+                return Err(TypeError::ExpectedFunType { found });
+            },
         }
     }
 
     let body = check_ann(&context, concrete_body, concrete_body_ty, &expected_ty)?;
 
-    Ok(param_names
+    Ok(param_tys
         .iter()
+        .rev()
         .fold(body, |acc, _| core::RcTerm::from(core::Term::FunIntro(acc))))
 }
 
-/// Synthesize the type of a function introduction
-fn synth_fun_intro<'term>(
+/// Synthesize the type of a clause
+fn synth_clause<'term>(
     context: &Context<'term>,
-    param_names: &'term [String],
+    patterns: &'term [Pattern],
     concrete_body_ty: Option<&'term Term>,
     concrete_body: &'term Term,
 ) -> Result<(core::RcTerm, domain::RcType), TypeError> {
-    if !param_names.is_empty() {
+    if !patterns.is_empty() {
         // TODO: We will be able to type this once we have annotated patterns!
         unimplemented!("type annotations needed");
     }
@@ -368,7 +377,7 @@ fn synth_fun_intro<'term>(
     let (body, body_ty) = synth_ann(&context, concrete_body, concrete_body_ty)?;
 
     Ok((
-        param_names
+        patterns
             .iter()
             .fold(body, |acc, _| core::RcTerm::from(core::Term::FunIntro(acc))),
         body_ty,
@@ -411,8 +420,8 @@ pub fn check_term<'term>(
         },
         Term::Parens(concrete_term) => check_term(context, concrete_term, expected_ty),
 
-        Term::FunIntro(param_names, concrete_body) => {
-            check_fun_intro(context, param_names, None, concrete_body, expected_ty)
+        Term::FunIntro(patterns, concrete_body) => {
+            check_clause(context, patterns, None, concrete_body, expected_ty)
         },
 
         Term::PairIntro(concrete_fst, concrete_snd) => match expected_ty.as_ref() {

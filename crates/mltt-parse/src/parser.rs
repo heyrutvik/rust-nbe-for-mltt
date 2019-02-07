@@ -36,8 +36,7 @@
 //!
 
 use language_reporting::{Diagnostic, Label};
-use mltt_concrete::syntax::{Item, Term};
-use mltt_concrete::syntax::{Literal, LiteralKind};
+use mltt_concrete::syntax::{Item, Literal, LiteralKind, Pattern, Term};
 use mltt_span::FileSpan;
 
 use crate::token::{DelimKind, Token, TokenKind};
@@ -274,9 +273,9 @@ where
         } else {
             log::trace!("expecting item definition");
 
-            let mut param_names = Vec::new();
+            let mut patterns = Vec::new();
             while let Some(param_name) = self.try_identifier() {
-                param_names.push(param_name);
+                patterns.push(Pattern::Var(param_name));
             }
 
             let body_ty = if self.try_match(TokenKind::Colon).is_some() {
@@ -292,11 +291,11 @@ where
                 Ok(Item::Definition {
                     docs,
                     name,
-                    param_names,
+                    patterns,
                     body_ty,
                     body,
                 })
-            } else if param_names.is_empty() {
+            } else if patterns.is_empty() {
                 // TODO: Span
                 Err(Diagnostic::new_error("expected declaration or definition"))
             } else {
@@ -522,11 +521,11 @@ where
     /// fun-intro ::= IDENTIFIER+ "=>" term(0)
     /// ```
     fn parse_fun_intro(&mut self, token: Token<'file>) -> Result<Term, Diagnostic<FileSpan>> {
-        let mut params = Vec::new();
+        let mut patterns = Vec::new();
         while let Some(name) = self.try_identifier() {
-            params.push(name);
+            patterns.push(Pattern::Var(name));
         }
-        if params.is_empty() {
+        if patterns.is_empty() {
             return Err(
                 Diagnostic::new_error("expected at least one parameters").with_label(
                     Label::new_primary(token.span)
@@ -537,7 +536,7 @@ where
         self.expect_match(TokenKind::RFatArrow)?;
         let body = self.parse_term(Prec(0))?;
 
-        Ok(Term::FunIntro(params, Box::new(body)))
+        Ok(Term::FunIntro(patterns, Box::new(body)))
     }
 
     /// Parse the trailing part of a parenthesis grouping
@@ -853,7 +852,10 @@ mod tests {
     fn fun_intro() {
         test_term!(
             r"fun x => x",
-            Term::FunIntro(vec!["x".to_owned()], Box::new(Term::Var("x".to_owned()))),
+            Term::FunIntro(
+                vec![Pattern::Var("x".to_owned())],
+                Box::new(Term::Var("x".to_owned())),
+            ),
         );
     }
 
@@ -862,7 +864,11 @@ mod tests {
         test_term!(
             r"fun x y z => x",
             Term::FunIntro(
-                vec!["x".to_owned(), "y".to_owned(), "z".to_owned()],
+                vec![
+                    Pattern::Var("x".to_owned()),
+                    Pattern::Var("y".to_owned()),
+                    Pattern::Var("z".to_owned()),
+                ],
                 Box::new(Term::Var("x".to_owned())),
             ),
         );
