@@ -1,9 +1,13 @@
 use std::fmt;
+use std::ops;
 
 use crate::{ByteIndex, ByteSize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Span<Source> {
+pub struct RelativeSource;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Span<Source = RelativeSource> {
     source: Source,
     start: ByteIndex,
     end: ByteIndex,
@@ -88,5 +92,34 @@ impl<Source: Copy + fmt::Debug> language_reporting::ReportingSpan for Span<Sourc
 
     fn end(&self) -> usize {
         Span::end(self).to_usize()
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Spanned<T, Source = RelativeSource> {
+    pub span: Span<Source>,
+    pub value: T,
+}
+
+impl<T, Source> Spanned<T, Source> {
+    pub fn map<U>(self, value: impl FnOnce(T) -> U) -> Spanned<U, Source> {
+        Spanned {
+            span: self.span,
+            value: value(self.value),
+        }
+    }
+}
+
+impl<T, Source> ops::Deref for Spanned<T, Source> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: fmt::Display, Source> fmt::Display for Spanned<T, Source> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.value.fmt(f)
     }
 }

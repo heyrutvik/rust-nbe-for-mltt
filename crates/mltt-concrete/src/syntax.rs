@@ -11,6 +11,7 @@
 //!
 //! [Swift's parse tree]: https://github.com/apple/swift/tree/daf7d249a528ceea3c6b8ff8f5226be9af67f85c/lib/Syntax
 
+use mltt_span::Spanned;
 use pretty::{BoxDoc, Doc};
 use std::fmt;
 
@@ -19,15 +20,15 @@ use std::fmt;
 pub enum Item {
     /// Forward-declarations
     Declaration {
-        docs: Vec<String>,
-        name: String,
+        docs: Vec<Spanned<String>>,
+        name: Spanned<String>,
         ann: Term,
     },
     /// Term definitions
     Definition {
-        docs: Vec<String>,
-        name: String,
-        param_names: Vec<String>,
+        docs: Vec<Spanned<String>>,
+        name: Spanned<String>,
+        param_names: Vec<Spanned<String>>,
         body_ty: Option<Term>,
         body: Term,
     },
@@ -76,11 +77,11 @@ impl Literal {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     /// Variables
-    Var(String),
+    Var(Spanned<String>),
     /// Literals
     Literal(Literal),
     /// Let bindings
-    Let(String, Box<Term>, Box<Term>),
+    Let(Spanned<String>, Box<Term>, Box<Term>),
     /// A term that is explicitly annotated with a type
     Ann(Box<Term>, Box<Term>),
     /// A parenthesized term
@@ -89,20 +90,20 @@ pub enum Term {
     /// Dependent function type
     ///
     /// Also known as a _pi type_ or _dependent product type_.
-    FunType(Vec<(Vec<String>, Term)>, Box<Term>),
+    FunType(Vec<(Vec<Spanned<String>>, Term)>, Box<Term>),
     /// Non-dependent function types
     FunArrowType(Box<Term>, Box<Term>),
     /// Introduce a function
     ///
     /// Also known as a _lambda expression_ or _anonymous function_.
-    FunIntro(Vec<String>, Box<Term>),
+    FunIntro(Vec<Spanned<String>>, Box<Term>),
     /// Apply a function to an argument
     FunApp(Box<Term>, Vec<Term>),
 
     /// Dependent pair type
     ///
     /// Also known as a _sigma type_ or _dependent sum type_
-    PairType(Option<String>, Box<Term>, Box<Term>),
+    PairType(Option<Spanned<String>>, Box<Term>, Box<Term>),
     /// Introduce a pair
     PairIntro(Box<Term>, Box<Term>),
     /// Project the first element of a pair
@@ -137,7 +138,7 @@ impl Term {
                 Term::Let(def_name, def, body) => Doc::nil()
                     .append("let")
                     .append(Doc::space())
-                    .append(def_name)
+                    .append(def_name.value)
                     .append(Doc::space())
                     .append("=")
                     .append(Doc::space())
@@ -156,7 +157,7 @@ impl Term {
                                     Doc::nil()
                                         .append("(")
                                         .append(Doc::intersperse(
-                                            param_names.iter().map(Doc::text),
+                                            param_names.iter().map(|n| Doc::text(&n.value)),
                                             Doc::space(),
                                         ))
                                         .append(Doc::space())
@@ -176,7 +177,7 @@ impl Term {
                     .append("fun")
                     .append(Doc::space())
                     .append(Doc::intersperse(
-                        param_names.iter().map(Doc::text),
+                        param_names.iter().map(|n| Doc::text(&n.value)),
                         Doc::space(),
                     ))
                     .append(Doc::space())
@@ -189,7 +190,7 @@ impl Term {
                     .append("{")
                     .append(Doc::space())
                     .append(fst_name.as_ref().map_or(Doc::nil(), |fst_name| {
-                        Doc::text(fst_name).append(Doc::space()).append(":")
+                        Doc::text(fst_name.value).append(Doc::space()).append(":")
                     }))
                     .append(Doc::space())
                     .append(to_doc_term(fst_ty))

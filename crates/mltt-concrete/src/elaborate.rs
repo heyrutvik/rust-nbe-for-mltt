@@ -11,6 +11,7 @@
 use im;
 use mltt_core::nbe::{self, NbeError};
 use mltt_core::syntax::{core, domain, normal, DbIndex, DbLevel, UniverseLevel};
+use mltt_span::Spanned;
 use std::error::Error;
 use std::fmt;
 
@@ -18,18 +19,18 @@ use crate::syntax::{Item, Term};
 
 /// Local elaboration context
 #[derive(Debug, Clone, PartialEq)]
-pub struct Context<'term> {
+pub struct Context {
     /// Number of local entries
     level: DbLevel,
     /// Values to be used during evaluation
     values: domain::Env,
     /// The user-defined names and type annotations of the binders we have passed over
-    binders: im::Vector<(Option<&'term String>, domain::RcType)>,
+    binders: im::Vector<(Option<Spanned<String>>, domain::RcType)>,
 }
 
-impl<'term> Context<'term> {
+impl Context {
     /// Create a new, empty context
-    pub fn new() -> Context<'term> {
+    pub fn new() -> Context {
         Context {
             level: DbLevel(0),
             values: domain::Env::new(),
@@ -50,7 +51,7 @@ impl<'term> Context<'term> {
     /// Add a new local entry to the context
     pub fn insert_local(
         &mut self,
-        name: impl Into<Option<&'term String>>,
+        name: impl Into<Option<Spanned<String>>>,
         value: domain::RcValue,
         ty: domain::RcType,
     ) {
@@ -67,7 +68,7 @@ impl<'term> Context<'term> {
     /// Add a new binder to the context, returning a value that points to the parameter
     pub fn insert_binder(
         &mut self,
-        name: impl Into<Option<&'term String>>,
+        name: impl Into<Option<Spanned<String>>>,
         ty: domain::RcType,
     ) -> domain::RcValue {
         let param = domain::RcValue::var(self.level());
@@ -79,7 +80,7 @@ impl<'term> Context<'term> {
     /// context using a user-defined name
     pub fn lookup_binder(&self, name: &str) -> Option<(DbIndex, &domain::RcType)> {
         for (i, (n, ty)) in self.binders.iter().enumerate() {
-            if Some(name) == n.map(String::as_str) {
+            if Some(name) == n.map(|n| n.as_str()) {
                 let level = DbIndex(i as u32);
 
                 log::trace!("lookup binder: {} -> @{}", name, level.0);
@@ -117,9 +118,9 @@ impl<'term> Context<'term> {
 /// An error produced during type checking
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
-    AlreadyDeclared(String),
-    AlreadyDefined(String),
-    AlreadyDocumented(String),
+    AlreadyDeclared(Spanned<String>),
+    AlreadyDefined(Spanned<String>),
+    AlreadyDocumented(Spanned<String>),
     ExpectedFunType {
         found: domain::RcType,
     },
@@ -132,7 +133,7 @@ pub enum TypeError {
     },
     ExpectedSubtype(domain::RcType, domain::RcType),
     AmbiguousTerm(Term),
-    UnboundVariable(String),
+    UnboundVariable(Spanned<String>),
     Nbe(NbeError),
 }
 
@@ -173,7 +174,7 @@ impl fmt::Display for TypeError {
 
 /// Concatenate a bunch of lines of documentation into a single string, removing
 /// comment prefixes if they are found.
-fn concat_docs(doc_lines: &[String]) -> String {
+fn concat_docs(doc_lines: &[Spanned<String>]) -> String {
     let mut doc = String::new();
     for doc_line in doc_lines {
         // Strip the `||| ` or `|||` prefix left over from tokenization
@@ -189,12 +190,16 @@ fn concat_docs(doc_lines: &[String]) -> String {
 
 /// Select the documentation from either the declaration or the definition,
 /// returning an error if both are present.
-fn merge_docs(name: &str, decl_docs: &[String], defn_docs: &[String]) -> Result<String, TypeError> {
+fn merge_docs(
+    name: &Spanned<String>,
+    decl_docs: &[Spanned<String>],
+    defn_docs: &[Spanned<String>],
+) -> Result<String, TypeError> {
     match (decl_docs, defn_docs) {
         ([], []) => Ok("".to_owned()),
         (docs, []) => Ok(concat_docs(docs)),
         ([], docs) => Ok(concat_docs(docs)),
-        (_, _) => Err(TypeError::AlreadyDocumented(name.to_owned())),
+        (_, _) => Err(TypeError::AlreadyDocumented(name.clone())),
     }
 }
 
@@ -285,10 +290,10 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
                 log::trace!("elaborated declaration:\t{}\t: {}", name, term_ty);
                 log::trace!("elaborated definition:\t{}\t= {}", name, term);
 
-                context.insert_local(name, value, ty);
+                context.insert_local(name.clone(), value, ty);
                 core_items.push(core::Item {
                     doc,
-                    name: name.clone(),
+                    name: name.value.clone(),
                     term_ty,
                     term,
                 });
@@ -300,11 +305,11 @@ pub fn check_module(concrete_items: &[Item]) -> Result<Vec<core::Item>, TypeErro
 }
 
 /// Check that a function introduction conforms to an expected type
-fn check_fun_intro<'term>(
-    context: &Context<'term>,
-    param_names: &'term [String],
-    concrete_body_ty: Option<&'term Term>,
-    concrete_body: &'term Term,
+fn check_fun_intro(
+    context: &Context,
+    param_names: &[Spanned<String>],
+    concrete_body_ty: Option<&Term>,
+    concrete_body: &Term,
     expected_ty: &domain::RcType,
 ) -> Result<core::RcTerm, TypeError> {
     let mut context = context.clone();
@@ -312,7 +317,7 @@ fn check_fun_intro<'term>(
 
     for param_name in param_names.iter() {
         if let domain::Value::FunType(param_ty, body_ty) = expected_ty.as_ref() {
-            let param = context.insert_binder(param_name, param_ty.clone());
+            let param = context.insert_binder(param_name.clone(), param_ty.clone());
             expected_ty = nbe::do_closure_app(body_ty, param)?;
         } else {
             let found = expected_ty.clone();
@@ -336,11 +341,11 @@ fn check_fun_intro<'term>(
 }
 
 /// Synthesize the type of a function introduction
-fn synth_fun_intro<'term>(
-    context: &Context<'term>,
-    param_names: &'term [String],
-    concrete_body_ty: Option<&'term Term>,
-    concrete_body: &'term Term,
+fn synth_fun_intro(
+    context: &Context,
+    param_names: &[Spanned<String>],
+    concrete_body_ty: Option<&Term>,
+    concrete_body: &Term,
 ) -> Result<(core::RcTerm, domain::RcType), TypeError> {
     if !param_names.is_empty() {
         // TODO: We will be able to type this once we have annotated patterns!
@@ -365,9 +370,9 @@ fn synth_fun_intro<'term>(
 }
 
 /// Check that a given term conforms to an expected type
-pub fn check_term<'term>(
-    context: &Context<'term>,
-    concrete_term: &'term Term,
+pub fn check_term(
+    context: &Context,
+    concrete_term: &Term,
     expected_ty: &domain::RcType,
 ) -> Result<core::RcTerm, TypeError> {
     log::trace!("checking term:\t\t{}", concrete_term);
@@ -379,7 +384,7 @@ pub fn check_term<'term>(
             let def_value = context.eval(&def)?;
             let body = {
                 let mut context = context.clone();
-                context.insert_local(def_name, def_value, def_ty);
+                context.insert_local(def_name.clone(), def_value, def_ty);
                 check_term(&context, concrete_body, expected_ty)?
             };
 
@@ -394,7 +399,7 @@ pub fn check_term<'term>(
             for (param_names, concrete_param_ty) in concrete_params {
                 for param_name in param_names {
                     let param_ty = check_term(&context, concrete_param_ty, expected_ty)?;
-                    context.insert_binder(param_name, context.eval(&param_ty)?);
+                    context.insert_binder(param_name.clone(), context.eval(&param_ty)?);
                     param_tys.push(param_ty);
                 }
             }
@@ -424,7 +429,7 @@ pub fn check_term<'term>(
             let fst_ty_value = context.eval(&fst_ty)?;
             let snd_ty = {
                 let mut context = context.clone();
-                context.insert_binder(fst_name, fst_ty_value);
+                context.insert_binder(fst_name.clone(), fst_ty_value);
                 check_term(&context, concrete_snd_ty, expected_ty)?
             };
 
@@ -466,14 +471,14 @@ pub fn check_term<'term>(
 }
 
 /// Synthesize the type of the given term
-pub fn synth_term<'term>(
-    context: &Context<'term>,
-    concrete_term: &'term Term,
+pub fn synth_term(
+    context: &Context,
+    concrete_term: &Term,
 ) -> Result<(core::RcTerm, domain::RcType), TypeError> {
     log::trace!("synthesizing term:\t\t{}", concrete_term);
 
     match concrete_term {
-        Term::Var(name) => match context.lookup_binder(name.as_str()) {
+        Term::Var(name) => match context.lookup_binder(name.value.as_str()) {
             None => Err(TypeError::UnboundVariable(name.clone())),
             Some((index, ann)) => Ok((core::RcTerm::from(core::Term::Var(index)), ann.clone())),
         },
@@ -483,7 +488,7 @@ pub fn synth_term<'term>(
             let def_value = context.eval(&def)?;
             let (body, body_ty) = {
                 let mut context = context.clone();
-                context.insert_local(def_name, def_value, def_ty);
+                context.insert_local(def_name.clone(), def_value, def_ty);
                 synth_term(&context, concrete_body)?
             };
 
@@ -549,10 +554,7 @@ pub fn synth_term<'term>(
 }
 
 /// Check that the given term is a type
-pub fn check_term_ty<'term>(
-    context: &Context<'term>,
-    concrete_term: &'term Term,
-) -> Result<core::RcTerm, TypeError> {
+pub fn check_term_ty(context: &Context, concrete_term: &Term) -> Result<core::RcTerm, TypeError> {
     log::trace!("checking term is type:\t{}", concrete_term);
 
     match concrete_term {
@@ -561,7 +563,7 @@ pub fn check_term_ty<'term>(
             let def_value = context.eval(&def)?;
             let body = {
                 let mut context = context.clone();
-                context.insert_local(def_name, def_value, def_ty);
+                context.insert_local(def_name.clone(), def_value, def_ty);
                 check_term_ty(&context, concrete_body)?
             };
 
@@ -576,7 +578,7 @@ pub fn check_term_ty<'term>(
             for (param_names, concrete_param_ty) in concrete_params {
                 for param_name in param_names {
                     let param_ty = check_term_ty(&context, concrete_param_ty)?;
-                    context.insert_binder(param_name, context.eval(&param_ty)?);
+                    context.insert_binder(param_name.clone(), context.eval(&param_ty)?);
                     param_tys.push(param_ty);
                 }
             }
@@ -603,7 +605,7 @@ pub fn check_term_ty<'term>(
             let fst_ty_value = context.eval(&fst_ty)?;
             let snd_ty = {
                 let mut snd_ty_context = context.clone();
-                snd_ty_context.insert_binder(fst_name, fst_ty_value);
+                snd_ty_context.insert_binder(fst_name.clone(), fst_ty_value);
                 check_term_ty(&snd_ty_context, concrete_snd_ty)?
             };
 
