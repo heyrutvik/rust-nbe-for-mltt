@@ -213,31 +213,97 @@ pub fn read_back_neutral(
     }
 }
 
+fn check_value(level: DbLevel, value1: &RcValue, value2: &RcValue) -> bool {
+    match (value1.as_ref(), value2.as_ref()) {
+        (Value::Neutral(neutral1), Value::Neutral(neutral2)) => {
+            check_neutral(level, neutral1, neutral2)
+        },
+        (Value::Literal(literal1), Value::Literal(literal2)) => literal1 == literal2,
+        (Value::FunType(param_ty1, body_ty1), Value::FunType(param_ty2, body_ty2)) => {
+            //   | D.Normal {tp = D.Uni i; term = D.Pi (src1, dest1)},
+            //     D.Normal {tp = D.Uni j; term = D.Pi (src2, dest2)} ->
+            //     let var = D.mk_var src1 size in
+            //     check_nf size (D.Normal {tp = D.Uni i; term = src1}) (D.Normal {tp = D.Uni j; term = src2})
+            //     && check_nf (size + 1) (D.Normal {tp = D.Uni i; term = do_clos dest1 var})
+            //       (D.Normal {tp = D.Uni j; term = do_clos dest2 var})
+            unimplemented!()
+        },
+        (Value::FunIntro(body1), Value::FunIntro(body2)) => {
+            //   (* Functions *)
+            //   | D.Normal {tp = D.Pi (src1, dest1); term = f1},
+            //     D.Normal {tp = D.Pi (_, dest2); term = f2} ->
+            //     let arg = D.mk_var src1 size in
+            //     let nf1 = D.Normal {tp = do_clos dest1 arg; term = do_ap f1 arg} in
+            //     let nf2 = D.Normal {tp = do_clos dest2 arg; term = do_ap f2 arg} in
+            //     check_nf (size + 1) nf1 nf2
+            unimplemented!()
+        },
+        (Value::PairType(fst_ty1, snd_ty1), Value::PairType(fst_ty2, snd_ty2)) => {
+            //   | D.Normal {tp = D.Uni i; term = D.Sig (src1, dest1)},
+            //     D.Normal {tp = D.Uni j; term = D.Sig (src2, dest2)} ->
+            //     let var = D.mk_var src1 size in
+            //     check_nf size (D.Normal {tp = D.Uni i; term = src1}) (D.Normal {tp = D.Uni j; term = src2})
+            //     && check_nf (size + 1) (D.Normal {tp = D.Uni i; term = do_clos dest1 var})
+            //       (D.Normal {tp = D.Uni j; term = do_clos dest2 var})
+            unimplemented!()
+        },
+        (Value::PairIntro(fst1, snd1), Value::PairIntro(fst2, snd2)) => {
+            //   (* Pairs *)
+            //   | D.Normal {tp = D.Sig (fst1, snd1); term = p1},
+            //     D.Normal {tp = D.Sig (fst2, snd2); term = p2} ->
+            //     let p11, p21 = do_fst p1, do_fst p2 in
+            //     let snd1 = do_clos snd1 p11 in
+            //     let snd2 = do_clos snd2 p21 in
+            //     let p12, p22 = do_snd p1, do_snd p2 in
+            //     check_nf size (D.Normal {tp = fst1; term = p11}) (D.Normal {tp = fst2; term = p21})
+            //     && check_nf size (D.Normal {tp = snd1; term = p12}) (D.Normal {tp = snd2; term = p22})
+            unimplemented!()
+        },
+        (Value::Universe(level1), Value::Universe(level2)) => level1 == level2,
+        _ => false,
+    }
+}
+
+fn check_neutral(
+    level: DbLevel,
+    neutral1: &domain::RcNeutral,
+    neutral2: &domain::RcNeutral,
+) -> bool {
+    match (neutral1.as_ref(), neutral2.as_ref()) {
+        (domain::Neutral::Var(var_level1), domain::Neutral::Var(var_level2)) => {
+            var_level1 == var_level2
+        },
+        (domain::Neutral::FunApp(fun1, arg1), domain::Neutral::FunApp(fun2, arg2)) => {
+            check_neutral(level, fun1, fun2) && check_value(level, arg1, arg2)
+        },
+        (domain::Neutral::PairFst(pair1), domain::Neutral::PairFst(pair2))
+        | (domain::Neutral::PairSnd(pair1), domain::Neutral::PairSnd(pair2)) => {
+            check_neutral(level, pair1, pair2)
+        },
+        _ => false,
+    }
+}
+
 /// Check whether a semantic type is a subtype of another
 pub fn check_subtype(level: DbLevel, ty1: &RcType, ty2: &RcType) -> Result<bool, NbeError> {
     match (&ty1.as_ref(), &ty2.as_ref()) {
-        (&Value::Neutral(term1), &Value::Neutral(term2)) => {
-            let term1 = read_back_neutral(level, term1)?;
-            let term2 = read_back_neutral(level, term2)?;
-
-            Ok(term1 == term2)
-        },
+        (&Value::Neutral(term1), &Value::Neutral(term2)) => Ok(check_neutral(level, term1, term2)),
         (&Value::FunType(param_ty1, body_ty1), &Value::FunType(param_ty2, body_ty2)) => {
             let param = RcValue::var(level);
 
-            Ok(check_subtype(level, param_ty2, param_ty1)? && {
+            Ok(check_value(level, param_ty2, param_ty1) && {
                 let body_ty1 = do_closure_app(body_ty1, param.clone())?;
                 let body_ty2 = do_closure_app(body_ty2, param)?;
-                check_subtype(level + 1, &body_ty1, &body_ty2)?
+                check_value(level + 1, &body_ty1, &body_ty2)
             })
         },
         (&Value::PairType(fst_ty1, snd_ty1), &Value::PairType(fst_ty2, snd_ty2)) => {
             let fst = RcValue::var(level);
 
-            Ok(check_subtype(level, fst_ty1, fst_ty2)? && {
+            Ok(check_value(level, fst_ty1, fst_ty2) && {
                 let snd_ty1 = do_closure_app(snd_ty1, fst.clone())?;
                 let snd_ty2 = do_closure_app(snd_ty2, fst)?;
-                check_subtype(level + 1, &snd_ty1, &snd_ty2)?
+                check_value(level + 1, &snd_ty1, &snd_ty2)
             })
         },
         (&Value::Universe(level1), &Value::Universe(level2)) => Ok(level1 <= level2),
